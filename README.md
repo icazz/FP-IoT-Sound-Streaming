@@ -2,13 +2,13 @@
 ## Bahan
 | Kategori  | Nama Barang                            | Jumlah |
 | --------- | -------------------------------------- | ------ |
-| Utama     | ESP32 DevKit V1                        |    2   |
-| Pengirim  | Modul Mikrofon Analog (KY-037/MAX4466) |    1   |
-| Penerima  | Modul Amplifier (PAM8403)              |    1   |
-| Penerima  | Speaker Kecil (8 Ohm)                  |    1   |
-| Pendukung | Breadboard (opsional)                  |    1   |
-| Pendukung | Kabel Jumper                           |    1   |
-| Pendukung | Kabel Micro USB & Adaptor 5V           |    2   |
+| Utama     | ESP32-C3                               |    2   | 
+| Pengirim  | INMP441                                |    1   |
+| Penerima  | PCM5102A                               |    1   | 
+| Penerima  | Earphone                               |    1   |
+| Pendukung | PCB 4x6                                |    2   |
+| Pendukung | Kabel Jumper                           |    13   |
+| Pendukung | Kabel type C                           |    2   |
 
 List Kebutuhan
 
