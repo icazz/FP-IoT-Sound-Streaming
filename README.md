@@ -9,3 +9,9 @@
 | Pendukung | PCB 4x6                                |    2   |
 | Pendukung | Kabel Jumper                           |    13   |
 | Pendukung | Kabel type C                           |    2   |
+
+## Shematic
+![simulasi](assets/Schematic.png)
+
+## Rangkaian
+![rangkaian](assets/cekk.png)
