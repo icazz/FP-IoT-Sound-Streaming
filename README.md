@@ -14,4 +14,4 @@
 ![simulasi](assets/Schematic.png)
 
 ## Rangkaian
-![rangkaian](assets/cekk.png)
+![rangkaian](assets/cekk.jpg)
