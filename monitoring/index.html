@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ESP32 Sound Stream Monitor</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            background-color: #f4f4f9;
+            color: #333;
+            text-align: center;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #fff;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            border-radius: 8px;
+        }
+        h1 {
+            color: #007bff;
+        }
+        #status {
+            font-weight: bold;
+            color: orange;
+        }
+        #avg_value_display {
+            font-size: 3em;
+            font-weight: bold;
+            margin-top: 10px;
+            padding: 15px;
+            border-radius: 5px;
+            transition: background-color 0.3s, color 0.3s;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Monitoring Suara ESP32 (HiveMQ)</h1>
+        <p>Status Koneksi MQTT: <span id="status">DISCONNECTED</span></p>
+        <hr>
+        <h2>Nilai Rata-Rata Suara (Avg Value)</h2>
+        <div id="avg_value_display">0.00</div>
+        <p>Topic yang Di-Subscribe: <code id="topic_name"></code></p>
+    </div>
+
+    <script>
+        // =========================================================
+        // === KONFIGURASI MQTT (WAJIB DISESUAIKAN) ===
+        // =========================================================
+        const host = "broker.hivemq.com"; // Ganti dengan alamat broker Anda (misalnya: xxxx.s1.eu.hivemq.cloud)
+        const port = 8000; // Umumnya 8000 untuk HiveMQ Public Broker WS (WebSockets)
+        const topic = "mic/avg_value"; // Harus sama persis dengan topic di ESP32 Anda
+        
+        // Catatan: Jika menggunakan HiveMQ Cloud (SSL), port adalah 8884 dan useSSL: true.
+        const useSSL = false; 
+        const mqtt_user = null; // Isi jika diperlukan otentikasi
+        const mqtt_password = null; // Isi jika diperlukan otentikasi
+        // =========================================================
+        
+        let client = new Paho.MQTT.Client(host, port, "/ws", "web_client_" + parseInt(Math.random() * 1000, 10));
+
+        // Atur fungsi callback
+        client.onConnectionLost = onConnectionLost;
+        client.onMessageArrived = onMessageArrived;
+        
+        document.getElementById("topic_name").innerText = topic;
+
+        // Coba koneksi ke broker
+        client.connect({
+            onSuccess: onConnect,
+            onFailure: onFailure,
+            userName: mqtt_user, 
+            password: mqtt_password,
+            useSSL: useSSL,
+            // Jika menggunakan port 8000/WebSockets: path harus /ws
+            // path: "/ws", 
+        });
+
+        function onConnect() {
+            document.getElementById("status").innerText = "CONNECTED";
+            document.getElementById("status").style.color = "green";
+            console.log("Connected to MQTT, Subscribing to " + topic);
+            client.subscribe(topic);
+        }
+
+        function onFailure(responseObject) {
+            document.getElementById("status").innerText = "CONNECTION FAILED: " + responseObject.errorMessage;
+            document.getElementById("status").style.color = "red";
+            console.error("Connection failed:", responseObject.errorMessage);
+        }
+
+        function onConnectionLost(responseObject) {
+            document.getElementById("status").innerText = "CONNECTION LOST. Attempting reconnect...";
+            document.getElementById("status").style.color = "orange";
+            console.warn("Connection lost. Reconnecting...");
+            // Coba sambung ulang secara otomatis
+            setTimeout(() => {
+                client.connect({
+                    onSuccess: onConnect,
+                    onFailure: onFailure,
+                    userName: mqtt_user, 
+                    password: mqtt_password,
+                    useSSL: useSSL
+                });
+            }, 2000); 
+        }
+
+        function onMessageArrived(message) {
+            // Data diterima dari ESP32 (Avg Value)
+            const payload = message.payloadString;
+            const avgValueDisplay = document.getElementById("avg_value_display");
+            
+            // Tampilkan nilai
+            avgValueDisplay.innerText = parseFloat(payload).toFixed(2);
+            
+            // Visualisasi: Ubah latar belakang berdasarkan volume
+            const value = parseFloat(payload);
+            
+            if (value > 800) {
+                 avgValueDisplay.style.backgroundColor = '#ff4d4d'; // Merah (Sangat Keras)
+            } else if (value > 300) {
+                 avgValueDisplay.style.backgroundColor = '#ffcc00'; // Kuning (Keras)
+            } else if (value > 50) {
+                 avgValueDisplay.style.backgroundColor = '#a0e4a0'; // Hijau Muda (Suara Normal)
+            } else {
+                 avgValueDisplay.style.backgroundColor = '#e0e0e0'; // Abu-abu (Diam)
+            }
+        }
+    </script>
+</body>
+</html>
