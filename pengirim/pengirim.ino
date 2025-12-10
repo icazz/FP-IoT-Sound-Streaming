@@ -2,17 +2,36 @@
 #include <WiFi.h>
 #include <WiFiUdp.h>
 #include <driver/i2s.h> 
+#include <PubSubClient.h> 
+#include <WiFiClient.h>
 
 // --- Kredensial Wi-Fi ---
-const char* ssid = "";
-const char* password = "";
+const char* ssid = "obladioblada";
+const char* password = "apaiyaapa";
+// const char* ssid = "ITS-WIFI-TW2";
+// const char* password = "itssurabaya";
+
+const char* mqtt_server = "68.183.186.150";
+const int mqtt_port = 1883;
+const char* mqtt_user = "rootkids";
+const char* mqtt_password = "12321";
+const char* IP_SUBSCRIBE_TOPIC = "config/receiver/ip"; // Topic untuk menerima IP
+
+WiFiClient espClient;
+PubSubClient client(espClient);
+
+// Ganti IPAddress remoteIP(192, 168, 1, 20); dengan ini:
+IPAddress remoteIP; // Dibiarkan kosong, akan diisi via MQTT
+bool ip_is_set = false; // Flag untuk memastikan IP sudah diterima
+const unsigned int remotePort = 4210;
+WiFiUDP Udp;
 
 // --- IP Receiver ---
 // PENTING: Pastikan IP ini sesuai dengan yang muncul di Serial Monitor Penerima!
 // Jika ganti WiFi ke "samara", IP mungkin berubah (bukan 192.168.43.xxx lagi)
-IPAddress remoteIP(192, 168, 1, 20); 
-const unsigned int remotePort = 4210;
-WiFiUDP Udp;
+// IPAddress remoteIP(192, 168, 1, 20); 
+// const unsigned int remotePort = 4210;
+// WiFiUDP Udp;
 
 // Pin I2S untuk INMP441 (Input Audio)
 #define I2S_BCLK_PIN 2  // SCK
@@ -28,6 +47,41 @@ WiFiUDP Udp;
 int16_t sample_buffer[BUFFER_SIZE / 2]; 
 size_t bytes_read;
 
+// --- FUNGSI RECONNECT MQTT ---
+void reconnectMQTT() {
+  while (!client.connected()) {
+    Serial.print("Attempting MQTT connection...");
+    String clientId = "ESP32C3-SENDER-";
+    clientId += String(random(0xffff), HEX);
+    
+    if (client.connect(clientId.c_str(), mqtt_user, mqtt_password)) {
+      Serial.println("MQTT Connected. Subscribing to IP Topic...");
+      client.subscribe(IP_SUBSCRIBE_TOPIC); // <-- SUBSCRIBE KE TOPIC IP RECEIVER
+    } else {
+      Serial.print("failed, rc=");
+      Serial.print(client.state());
+      Serial.println(" Retrying in 5 seconds.");
+      delay(5000);
+    }
+  }
+}
+
+// --- FUNGSI CALLBACK (MENERIMA IP) ---
+void callback(char* topic, byte* payload, unsigned int length) {
+  if (strcmp(topic, IP_SUBSCRIBE_TOPIC) == 0) {
+    char ip_buffer[length + 1];
+    memcpy(ip_buffer, payload, length);
+    ip_buffer[length] = '\0'; 
+    String ip_string = ip_buffer;
+
+    remoteIP.fromString(ip_string);
+    ip_is_set = true; // Setel flag
+    
+    Serial.print("✅ NEW RECEIVER IP SET: ");
+    Serial.println(remoteIP.toString());
+  }
+}
+
 void setup() {
   Serial.begin(115200);
 
@@ -42,6 +96,10 @@ void setup() {
   Serial.print("Connecting to WiFi...");
   while (WiFi.status() != WL_CONNECTED) { delay(500); Serial.print("."); }
   Serial.println("\nConnected! Sender IP: " + WiFi.localIP().toString());
+
+  client.setServer(mqtt_server, mqtt_port);
+  client.setCallback(callback); // <-- Setel fungsi penerima pesan
+  reconnectMQTT();
   
   // 2. Konfigurasi I2S (sebagai Input/RX)
   i2s_config_t i2s_config = {
@@ -70,6 +128,12 @@ void setup() {
 }
 
 void loop() {
+  if (!client.connected()) {
+        reconnectMQTT();
+  }
+  client.loop(); // WAJIB: Memproses pesan masuk (menerima IP)
+
+
   // 3. Baca data dari INMP441 (512 bytes)
   i2s_read(I2S_NUM_0, (char*)sample_buffer, BUFFER_SIZE, &bytes_read, portMAX_DELAY);
   
@@ -93,9 +157,17 @@ void loop() {
     }
     
     // 4. Kirim data audio melalui UDP
-    Udp.beginPacket(remoteIP, remotePort);
-    Udp.write((uint8_t*)sample_buffer, bytes_read); 
+    // Udp.beginPacket(remoteIP, remotePort);
+    // Udp.write((uint8_t*)sample_buffer, bytes_read); 
     
+    if (ip_is_set) { // <-- CEK FLAG INI
+        Udp.beginPacket(remoteIP, remotePort);
+        Udp.write((uint8_t*)sample_buffer, bytes_read); 
+        // ... (Logika send_status) ...
+    } else {
+        Serial.println("Waiting for Receiver IP via MQTT...");
+    }
+
     // --- DEBUG 2: Verifikasi Pengiriman UDP ---
     int send_status = Udp.endPacket(); 
 

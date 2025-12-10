@@ -2,10 +2,23 @@
 #include <WiFi.h>
 #include <WiFiUdp.h>
 #include <driver/i2s.h> // Header Wajib untuk fungsi I2S
+#include <PubSubClient.h> 
+#include <WiFiClient.h>
 
 // --- Kredensial Wi-Fi ---
-const char* ssid = "";
-const char* password = "";
+const char* ssid = "obladioblada";
+const char* password = "apaiyaapa";
+// const char* ssid = "ITS-WIFI-TW2";
+// const char* password = "itssurabaya";
+
+const char* mqtt_server = "68.183.186.150";
+const int mqtt_port = 1883;
+const char* mqtt_user = "rootkids"; 
+const char* mqtt_password = "12321"; 
+const char* IP_PUBLISH_TOPIC = "config/receiver/ip";
+
+WiFiClient espClient;
+PubSubClient client(espClient);
 
 // Port UDP yang sama dengan pengirim
 const unsigned int localPort = 4210; 
@@ -25,6 +38,40 @@ WiFiUDP Udp;
 // Buffer untuk menerima paket UDP
 int16_t rx_buffer[BUFFER_SIZE / 2];
 
+// --- FUNGSI RECONNECT MQTT UNTUK PENERIMA ---
+void reconnectMQTT() {
+  while (!client.connected()) {
+    Serial.print("Attempting MQTT connection...");
+    
+    // Buat client ID unik
+    String clientId = "ESP32C3-RECEIVER-";
+    clientId += String(random(0xffff), HEX);
+    
+    // Coba sambungkan dengan username dan password
+    if (client.connect(clientId.c_str(), mqtt_user, mqtt_password)) {
+      Serial.println("MQTT Connected.");
+      
+      // Catatan: Setelah berhasil connect, Anda harus memanggil publishIP()
+      // di dalam setup() untuk mengirim alamat IP Receiver ke broker.
+      
+    } else {
+      Serial.print("failed, rc=");
+      // rc= -2: CLIENT_ID_TOO_LONG, -4: CONNECTION_TIMEOUT, -5: CONNECT_FAILED
+      Serial.print(client.state());
+      Serial.println(" Retrying in 5 seconds.");
+      delay(5000);
+    }
+  }
+}
+
+// --- FUNGSI PUBLISH IP (Receiver ke Broker) ---
+void publishIP() {
+    String ip = WiFi.localIP().toString();
+    client.publish(IP_PUBLISH_TOPIC, ip.c_str(), true); // 'true' untuk Retained Message
+    Serial.print("✅ Published self IP: ");
+    Serial.println(ip);
+}
+
 void setup() {
   Serial.begin(115200);
 
@@ -38,6 +85,10 @@ void setup() {
   Serial.print("Connecting to WiFi...");
   while (WiFi.status() != WL_CONNECTED) { delay(500); Serial.print("."); }
   Serial.println("\nConnected! Receiver IP: " + WiFi.localIP().toString());
+
+  client.setServer(mqtt_server, mqtt_port);
+  reconnectMQTT(); 
+  publishIP(); // <-- PUBLIKASIKAN IP SETELAH TERKONEKSI!
   
   // 2. Mulai mendengarkan di port UDP
   Udp.begin(localPort);
@@ -71,8 +122,12 @@ void setup() {
 
 void loop() {
   // 4. Periksa paket UDP yang masuk
-  int packetSize = Udp.parsePacket();
   
+  if (!client.connected()) {
+      reconnectMQTT();
+  }
+  client.loop(); // WAJIB
+  int packetSize = Udp.parsePacket();
   if (packetSize) {
     // --- DEBUG 1: Verifikasi Penerimaan Paket ---
     Serial.print("✅ UDP Received: ");
